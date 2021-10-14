@@ -1,0 +1,125 @@
+Description: >
+    This is a Challenge project to create a vpc with one public and one private subnet
+    with all web app infrastructure component.
+
+Parameters:
+
+    EnvironmentName:
+        Description: An environment name that will be prefixed to resource names
+        Type: String
+
+    VpcCIDR: 
+        Description: Please enter the IP range (CIDR notation) for this VPC
+        Type: String
+        
+    PublicSubnet1:
+        Description: IP range (CIDR notation) for the public subnet.
+        Type: String
+        
+
+    PrivateSubnet1:
+        Description: IP range (CIDR notation) for the private subnet.
+        Type: String
+        
+Resources:
+#   Create VPC
+    MainVPC: 
+        Type: AWS::EC2::VPC
+        Properties:
+            CidrBlock: !Ref VpcCIDR
+            EnableDnsHostnames: true
+            Tags: 
+                - Key: Name 
+                  Value: !Ref EnvironmentName
+
+    InternetGateway:
+        Type: AWS::EC2::InternetGateway
+        Properties:
+            Tags:
+                - Key: Name
+                  Value: "Internet Gateway For the Challenge"
+    InternetGatewayAttachment:
+        Type: AWS::EC2::VPCGatewayAttachment
+        Properties:
+            InternetGatewayId: !Ref InternetGateway
+            VpcId: !Ref MainVPC
+    
+    PublicSubnet1CIDR: 
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref MainVPC
+            AvailabilityZone: 'us-west-2a'
+            CidrBlock: !Ref PublicSubnet1
+            MapPublicIpOnLaunch: true
+            Tags: 
+                - Key: Name 
+                  Value: "Public Subnet AZ1"
+
+    PrivateSubnet1CIDR: 
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref MainVPC
+            AvailabilityZone: 'us-west-2b'
+            CidrBlock: !Ref PrivateSubnet1
+            MapPublicIpOnLaunch: false
+            Tags: 
+                - Key: Name 
+                  Value: "Private Subnet AZ1"
+
+    NatGateway1: 
+        Type: AWS::EC2::NatGateway
+        Properties: 
+            AllocationId: !GetAtt NatGateway1EIP.AllocationId
+            SubnetId: !Ref PublicSubnet1CIDR
+            Tags:
+            - Key: Name
+              Value: "NAT to be used by servers in the private subnet"
+
+    NatGateway1EIP:
+        Type: AWS::EC2::EIP
+        DependsOn: InternetGatewayAttachment
+    
+
+    PublicRouteTable1:
+        Type: AWS::EC2::RouteTable
+        Properties: 
+            VpcId: !Ref MainVPC
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${EnvironmentName} Public Routes
+
+    DefaultPublicRoute: 
+        Type: AWS::EC2::Route
+        DependsOn: InternetGatewayAttachment
+        Properties: 
+            RouteTableId: !Ref PublicRouteTable1
+            DestinationCidrBlock: 0.0.0.0/0
+            GatewayId: !Ref InternetGateway
+
+    PublicSubnet1RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PublicRouteTable1
+            SubnetId: !Ref PublicSubnet1CIDR
+    
+
+    PrivateRouteTable1:
+        Type: AWS::EC2::RouteTable
+        Properties: 
+            VpcId: !Ref MainVPC
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${EnvironmentName} Private Routes (AZ1)
+
+    DefaultPrivateRoute1:
+        Type: AWS::EC2::Route
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable1
+            DestinationCidrBlock: 0.0.0.0/0
+            NatGatewayId: !Ref NatGateway1
+
+    PrivateSubnet1RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable1
+            SubnetId: !Ref PrivateSubnet1CIDR
